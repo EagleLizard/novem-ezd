@@ -2,6 +2,9 @@
 import sourceMapSupport from 'source-map-support';
 sourceMapSupport.install();
 
+import { ezdCsvMain } from './lib/ezd-csv/ezd-csv';
+import { txtMain } from './lib/txt/txt-main';
+
 (async () => {
   try {
     await main();
@@ -12,5 +15,6 @@ sourceMapSupport.install();
 })();
 
 async function main() {
-  console.log('~ hey');
+  await ezdCsvMain();
+  await txtMain();
 }
