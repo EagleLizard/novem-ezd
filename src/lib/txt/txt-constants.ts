@@ -48,6 +48,9 @@ export const EBOOK_ENUM_ARRAY = [
   EBOOK_ENUM.ANTON_CHEKHOV,
 ];
 
+export const STATS_DELIM_START = '<!--';
+export const STATS_DELIM_END = '-->';
+
 export const EBOOK_TXT_FILE_URI_MAP: Record<EBOOK_ENUM, EBookTxtFileSrc> = {
   [EBOOK_ENUM.SHAKESPEARE]: {
     key: EBOOK_ENUM.SHAKESPEARE,
