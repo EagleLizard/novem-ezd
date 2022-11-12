@@ -32,6 +32,7 @@ const STATS_DELIM_END = '-->';
 export async function txtMain() {
   let eBookTxtFiles: EBookTxtFile[];
   let countCharsResultTuples: [ EBookTxtFile, CountCharsResult ][];
+  let countCharsTotalTimer: Timer, countCharsTotalMs: number;
 
   eBookTxtFiles = [];
 
@@ -59,6 +60,8 @@ export async function txtMain() {
 
   countCharsResultTuples = [];
 
+  countCharsTotalTimer = Timer.start();
+
   for(let i = 0; i < eBookTxtFiles.length; ++i) {
     let currEBookTxtFile: EBookTxtFile;
     let countCharsResult: CountCharsResult;
@@ -72,6 +75,8 @@ export async function txtMain() {
     ]);
   }
 
+  countCharsTotalMs = countCharsTotalTimer.stop();
+
   for(let i = 0; i < countCharsResultTuples.length; ++i) {
     let currCountCharsResultTuple: [ EBookTxtFile, CountCharsResult ];
     let currEBookTxtFile: EBookTxtFile, currCountCharsResult: CountCharsResult;
@@ -80,10 +85,13 @@ export async function txtMain() {
     console.log(currEBookTxtFile.title);
     console.log(`${getIntuitiveTimeString(currCountCharsResult.ms)}`);
     console.log(`lines: ${currCountCharsResult.lineCount.toLocaleString()}`);
+    console.log(`totalChars: ${currCountCharsResult.totalCharCount.toLocaleString()}`);
 
     console.log('');
     await writeCharCountTxtOutput(currEBookTxtFile, currCountCharsResult);
   }
+
+  console.log(`Counting chars for all ebooks took ${getIntuitiveTimeString(countCharsTotalMs)}`);
 }
 
 async function writeCharCountTxtOutput(eBookTxtFile: EBookTxtFile, countCharsResult: CountCharsResult) {

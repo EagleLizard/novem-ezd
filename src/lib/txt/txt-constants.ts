@@ -33,6 +33,8 @@ export enum EBOOK_ENUM {
   MONTE_CRISTO = 'MONTE_CRISTO',
   THE_INFERNO = 'THE_INFERNO',
   KING_JAMES_BIBLE = 'KING_JAMES_BIBLE',
+  DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE = 'DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE',
+  ANTON_CHEKHOV = 'ANTON_CHEKHOV',
 }
 
 export const EBOOK_ENUM_ARRAY = [
@@ -42,6 +44,8 @@ export const EBOOK_ENUM_ARRAY = [
   EBOOK_ENUM.MONTE_CRISTO,
   EBOOK_ENUM.THE_INFERNO,
   EBOOK_ENUM.KING_JAMES_BIBLE,
+  EBOOK_ENUM.DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE,
+  EBOOK_ENUM.ANTON_CHEKHOV,
 ];
 
 export const EBOOK_TXT_FILE_URI_MAP: Record<EBOOK_ENUM, EBookTxtFileSrc> = {
@@ -74,5 +78,15 @@ export const EBOOK_TXT_FILE_URI_MAP: Record<EBOOK_ENUM, EBookTxtFileSrc> = {
     key: EBOOK_ENUM.KING_JAMES_BIBLE,
     title: 'king-james-bible',
     uri: 'https://www.gutenberg.org/files/10/10-0.txt',
-  }
+  },
+  [EBOOK_ENUM.DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE]: {
+    key: EBOOK_ENUM.DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE,
+    title: 'decline-and-fall-of-the-roman-empire',
+    uri: 'https://www.gutenberg.org/files/25717/25717-0.txt'
+  },
+  [EBOOK_ENUM.ANTON_CHEKHOV]: {
+    key: EBOOK_ENUM.ANTON_CHEKHOV,
+    title: 'anton-chekhov',
+    uri: 'https://www.gutenberg.org/ebooks/57333.txt.utf-8',
+  },
 };
