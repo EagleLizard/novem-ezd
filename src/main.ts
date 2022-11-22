@@ -15,6 +15,7 @@ import { txtMain } from './lib/txt/txt-main';
 })();
 
 async function main() {
+  console.log(process.argv);
   // await ezdCsvMain();
   await txtMain();
 }

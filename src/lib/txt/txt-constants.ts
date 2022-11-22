@@ -35,6 +35,8 @@ export enum EBOOK_ENUM {
   KING_JAMES_BIBLE = 'KING_JAMES_BIBLE',
   DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE = 'DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE',
   ANTON_CHEKHOV = 'ANTON_CHEKHOV',
+  BROTHERS_KARAMAZOV = 'BROTHERS_KARAMAZOV',
+  DON_QUIXOTE = 'DON_QUIXOTE',
 }
 
 export const EBOOK_ENUM_ARRAY = [
@@ -46,6 +48,8 @@ export const EBOOK_ENUM_ARRAY = [
   EBOOK_ENUM.KING_JAMES_BIBLE,
   EBOOK_ENUM.DECLINE_AND_FALL_OF_THE_ROMAN_EMPIRE,
   EBOOK_ENUM.ANTON_CHEKHOV,
+  EBOOK_ENUM.BROTHERS_KARAMAZOV,
+  EBOOK_ENUM.DON_QUIXOTE,
 ];
 
 export const STATS_DELIM_START = '<!--';
@@ -91,5 +95,15 @@ export const EBOOK_TXT_FILE_URI_MAP: Record<EBOOK_ENUM, EBookTxtFileSrc> = {
     key: EBOOK_ENUM.ANTON_CHEKHOV,
     title: 'anton-chekhov',
     uri: 'https://www.gutenberg.org/ebooks/57333.txt.utf-8',
+  },
+  [EBOOK_ENUM.BROTHERS_KARAMAZOV]: {
+    key: EBOOK_ENUM.BROTHERS_KARAMAZOV,
+    title: 'brothers-karamazov',
+    uri: 'https://www.gutenberg.org/files/28054/28054-0.txt',
+  },
+  [EBOOK_ENUM.DON_QUIXOTE]: {
+    key: EBOOK_ENUM.DON_QUIXOTE,
+    title: 'don-quixote',
+    uri: 'https://www.gutenberg.org/ebooks/996.txt.utf-8',
   },
 };

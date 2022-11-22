@@ -31,6 +31,20 @@ export async function checkFile(filePath: string): Promise<boolean> {
   return stats.isFile();
 }
 
+export function checkFileSync(filePath: string): boolean {
+  let stats: Stats;
+  try {
+    stats = statSync(filePath);
+  } catch(e) {
+    if(e?.code === 'ENOENT') {
+      return false;
+    } else {
+      throw e;
+    }
+  }
+  return stats.isFile();
+}
+
 export function checkDirSync(dirPath: string): boolean {
   let stats: Stats;
   try {

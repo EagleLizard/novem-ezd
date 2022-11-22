@@ -82,10 +82,11 @@ export async function countCharsByLine(eBookTxtFile: EBookTxtFile): Promise<Coun
     for(let i = 0; i < line.length; ++i) {
       let currChar: string;
       currChar = line[i];
-      if(charCountMap[currChar] === undefined) {
-        charCountMap[currChar] = 0;
-      }
-      charCountMap[currChar]++;
+      // if(charCountMap[currChar] === undefined) {
+      //   charCountMap[currChar] = 0;
+      // }
+      // charCountMap[currChar]++;
+      charCountMap[currChar] = (charCountMap[currChar] ?? 0) + 1;
       totalCharCount++;
     }
     lineCount++;
