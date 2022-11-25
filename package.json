@@ -9,8 +9,10 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/lodash.chunk": "^4.2.7",
     "@types/node": "^18.11.9",
     "@types/node-fetch": "^2.6.2",
+    "@types/rimraf": "^3.0.2",
     "@types/source-map-support": "^0.5.6",
     "@typescript-eslint/eslint-plugin": "^5.42.0",
     "@typescript-eslint/parser": "^5.42.0",
@@ -19,8 +21,10 @@
   },
   "dependencies": {
     "csv": "^6.2.1",
+    "lodash.chunk": "^4.2.0",
     "node-fetch": "^2.6.7",
     "puppeteer": "^19.2.2",
+    "rimraf": "^3.0.2",
     "source-map-support": "^0.5.21"
   }
 }

@@ -4,6 +4,8 @@ sourceMapSupport.install();
 
 import { ezdCsvMain } from './lib/ezd-csv/ezd-csv';
 import { txtMain } from './lib/txt/txt-main';
+import { gutenbergScraperMain } from './lib/gutenberg-scraper/gutenberg-scraper';
+import { dirWalkMain } from './lib/dir-walk/dir-walk';
 
 (async () => {
   try {
@@ -17,5 +19,7 @@ import { txtMain } from './lib/txt/txt-main';
 async function main() {
   console.log(process.argv);
   // await ezdCsvMain();
-  await txtMain();
+  // await txtMain();
+  await gutenbergScraperMain();
+  // await dirWalkMain();
 }
