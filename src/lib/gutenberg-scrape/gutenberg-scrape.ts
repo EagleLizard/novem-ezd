@@ -4,9 +4,8 @@ import path from 'path';
 import os from 'os';
 
 import puppeteer from 'puppeteer';
-import _chunk from 'lodash.chunk';
 
-import { DATA_DIR_PATH, SCRAPED_EBOOKS_FILE_PATH, SCRAPED_EBOOKS_NOT_FOUND_FILE_PATH } from '../../constants';
+import { DATA_DIR_PATH, SCRAPED_EBOOKS_DIR_PATH, SCRAPED_EBOOKS_FILE_NAME, SCRAPED_EBOOKS_NOT_FOUND_FILE_NAME } from '../../constants';
 import { getIntuitiveTimeString } from '../../util/print-util';
 import { Timer } from '../../util/timer';
 import { sleep } from '../../util/sleep';
@@ -19,19 +18,23 @@ const NUM_CPUS = os.cpus().length;
 const MAX_CONCURRENT_PAGES = NUM_CPUS - 1;
 // const MAX_CONCURRENT_PAGES = Math.ceil(NUM_CPUS * Math.LOG2E);
 
-console.log(`MAX_CONCURRENT_PAGES: ${MAX_CONCURRENT_PAGES}`);
-
 const GUTENBERG_TOP_1000_URL = 'https://www.gutenberg.org/browse/scores/top1000.php';
 
 const TOP_1000_MONTH_SELECTOR = 'ol > a[href=\'#authors-last30\']';
 
-type ScrapedBook = {
+export type ScrapedBook = {
   title: string;
   plaintextUrl: string;
   pageUrl: string;
 };
 
+type GetPuppeteerLaunchArgsParams = {
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
 export async function gutenbergScrapeMain() {
+  console.log(`MAX_CONCURRENT_PAGES: ${MAX_CONCURRENT_PAGES}`);
   await gutenbergScraper();
 }
 
@@ -48,38 +51,10 @@ async function gutenbergScraper() {
 
   console.log('scraper');
   // console.log(puppeteer.defaultArgs());
-  args = [
-    '--no-sandbox',
-    // '--disable-gpu',
-    `--window-size=${viewportWidth},${viewportHeight}`,
-    '--disable-notifications',
-
-    // '--disable-accelerated-2d-canvas',
-    // '--no-first-run',
-
-    '--single-process',
-    // '--no-zygote',
-    // '--disable-setuid-sandbox',
-    // '--disable-infobars',
-    // '--no-first-run',
-    // '--window-position=0,0',
-    // '--ignore-certificate-errors',
-    // '--ignore-certificate-errors-skip-list',
-    // '--disable-dev-shm-usage',
-    // '--disable-accelerated-2d-canvas',
-    // '--hide-scrollbars',
-    // '--disable-extensions',
-    // '--force-color-profile=srgb',
-    // '--mute-audio',
-    // '--disable-background-timer-throttling',
-    // '--disable-backgrounding-occluded-windows',
-    // '--disable-breakpad',
-    // '--disable-component-extensions-with-background-pages',
-    // '--disable-features=TranslateUI,BlinkGenPropertyTrees,IsolateOrigins,site-per-process',
-    // '--disable-ipc-flooding-protection',
-    // '--disable-renderer-backgrounding',
-    // '--enable-features=NetworkService,NetworkServiceInProcess'
-  ];
+  args = getPuppeteerLaunchArgs({
+    viewportWidth,
+    viewportHeight,
+  });
   console.log(args);
   browser = await puppeteer.launch({
     headless: true,
@@ -98,7 +73,9 @@ async function scrapeTop1000(browser: puppeteer.Browser) {
   let page: puppeteer.Page;
   let allBookLinks: string[], bookLinks: string[];
   let scrapedBooks: ScrapedBook[], notFoundScrapedBooks: ScrapedBook[];
-  let bookLinkChunks: string[][];
+  let currentDateString: string;
+  let scrapedEBooksFileName: string, scrapedEBooksNotFoundFileName: string;
+  let scrapedEBooksFilePath: string, scrapedEBooksNotFoundFilePath: string;
 
   let scrapeBooksTimer: Timer, scrapedBooksMs: number;
   let completedScrapeTasks: number;
@@ -123,7 +100,6 @@ async function scrapeTop1000(browser: puppeteer.Browser) {
   allBookLinks = await page.evaluate((top1000MonthSelector) => {
     return [
       ...(
-        // document.querySelectorAll('ol li a[href^=\'/ebooks/\']')
         document
           .querySelectorAll('ol li a[href^=\'/ebooks/\']')
       )
@@ -140,7 +116,6 @@ async function scrapeTop1000(browser: puppeteer.Browser) {
   notFoundScrapedBooks = [];
   completedScrapeTasks = 0;
 
-  // bookLinkChunks = _chunk(bookLinks, MAX_CONCURRENT_PAGES);
   runningScrapeTasks = 0;
 
   console.log('');
@@ -178,8 +153,23 @@ async function scrapeTop1000(browser: puppeteer.Browser) {
   console.log('');
 
   console.log(`scraped ${scrapedBooks.length.toLocaleString()} ebooks in ${getIntuitiveTimeString(scrapedBooksMs)}`);
-  await writeFile(SCRAPED_EBOOKS_FILE_PATH, JSON.stringify(scrapedBooks, null, 2));
-  await writeFile(SCRAPED_EBOOKS_NOT_FOUND_FILE_PATH, JSON.stringify(notFoundScrapedBooks, null, 2));
+
+  await mkdirIfNotExistRecursive(SCRAPED_EBOOKS_DIR_PATH);
+  currentDateString = getCurrentDateString();
+  scrapedEBooksFileName = `${currentDateString}_${SCRAPED_EBOOKS_FILE_NAME}`;
+  scrapedEBooksNotFoundFileName = `${currentDateString}_${SCRAPED_EBOOKS_NOT_FOUND_FILE_NAME}`;
+  scrapedEBooksFilePath = [
+    SCRAPED_EBOOKS_DIR_PATH,
+    scrapedEBooksFileName,
+  ].join(path.sep);
+  scrapedEBooksNotFoundFilePath = [
+    SCRAPED_EBOOKS_DIR_PATH,
+    scrapedEBooksNotFoundFileName,
+  ].join(path.sep);
+  await writeFile(scrapedEBooksFilePath, JSON.stringify(scrapedBooks, null, 2));
+  await writeFile(scrapedEBooksNotFoundFilePath, JSON.stringify(notFoundScrapedBooks, null, 2));
+  // await writeFile(SCRAPED_EBOOKS_FILE_PATH, JSON.stringify(scrapedBooks, null, 2));
+  // await writeFile(SCRAPED_EBOOKS_NOT_FOUND_FILE_PATH, JSON.stringify(notFoundScrapedBooks, null, 2));
 }
 
 async function getPlaintextLink(browser: puppeteer.Browser, bookLink: string): Promise<ScrapedBook> {
@@ -197,10 +187,7 @@ async function getPlaintextLink(browser: puppeteer.Browser, bookLink: string): P
   });
 
   await page.goto(bookLink);
-  // await page.waitForNavigation({
-  //   waitUntil: 'domcontentloaded',
-  // });
-  // await page.waitForSelector('#tabs');
+
   await page.waitForSelector('div.page_content');
   [ title, plainTextLink ] = await page.evaluate(() => {
     let anchorEl: HTMLAnchorElement, titleEl: HTMLElement;
@@ -232,6 +219,18 @@ async function getPlaintextLink(browser: puppeteer.Browser, bookLink: string): P
   };
 }
 
+function getCurrentDateString(): string {
+  let today: Date;
+  let month: number, day: number, year: number;
+  let dateString: string;
+  today = new Date();
+  month = today.getMonth() + 1;
+  day = today.getDate();
+  year = today.getFullYear();
+  dateString = `${year}-${month}-${day}`;
+  return dateString;
+}
+
 function shouldInterceptPageRequest(resourceType: puppeteer.ResourceType): boolean {
   let foundInterceptIdx: number, shouldIntercept: boolean;
   foundInterceptIdx = [
@@ -244,4 +243,41 @@ function shouldInterceptPageRequest(resourceType: puppeteer.ResourceType): boole
   });
   shouldIntercept = foundInterceptIdx !== -1;
   return shouldIntercept;
+}
+
+function getPuppeteerLaunchArgs(params: GetPuppeteerLaunchArgsParams): string[] {
+  let args: string[];
+  args = [
+    '--no-sandbox',
+    // '--disable-gpu',
+    `--window-size=${params.viewportWidth},${params.viewportHeight}`,
+    '--disable-notifications',
+
+    // '--disable-accelerated-2d-canvas',
+    // '--no-first-run',
+
+    '--single-process',
+    // '--no-zygote',
+    // '--disable-setuid-sandbox',
+    // '--disable-infobars',
+    // '--no-first-run',
+    // '--window-position=0,0',
+    // '--ignore-certificate-errors',
+    // '--ignore-certificate-errors-skip-list',
+    // '--disable-dev-shm-usage',
+    // '--disable-accelerated-2d-canvas',
+    // '--hide-scrollbars',
+    // '--disable-extensions',
+    // '--force-color-profile=srgb',
+    // '--mute-audio',
+    // '--disable-background-timer-throttling',
+    // '--disable-backgrounding-occluded-windows',
+    // '--disable-breakpad',
+    // '--disable-component-extensions-with-background-pages',
+    // '--disable-features=TranslateUI,BlinkGenPropertyTrees,IsolateOrigins,site-per-process',
+    // '--disable-ipc-flooding-protection',
+    // '--disable-renderer-backgrounding',
+    // '--enable-features=NetworkService,NetworkServiceInProcess'
+  ];
+  return args;
 }
