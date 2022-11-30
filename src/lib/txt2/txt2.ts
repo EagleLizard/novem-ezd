@@ -1,9 +1,13 @@
 
 import path from 'path';
+import https from 'https';
+import dns from 'dns';
 import { createWriteStream, Dirent, WriteStream } from 'fs';
 import { readdir, readFile } from 'fs/promises';
+import { LookupFunction } from 'net';
 
 import fetch, { Response } from 'node-fetch';
+import _chunk from 'lodash.chunk';
 
 import { EBOOKS_DATA_DIR_PATH, SCRAPED_EBOOKS_DIR_PATH, SCRAPED_EBOOKS_FILE_NAME } from '../../constants';
 import { checkDir, checkFile, mkdirIfNotExistRecursive } from '../../util/files';
@@ -11,6 +15,7 @@ import { gutenbergScrapeMain, ScrapedBook } from '../gutenberg-scrape/gutenberg-
 import { Timer } from '../../util/timer';
 import { getIntuitiveTimeString } from '../../util/print-util';
 import { sleep } from '../../util/sleep';
+import { fetchRetry } from '../../util/fetch-retry';
 
 type ScrapedBookWithFile = {
   fileName: string;
@@ -19,7 +24,49 @@ type ScrapedBookWithFile = {
 
 const TXT_SCRAPE_COMMAND = 'scrape';
 
-const MAX_CONCURRENT_DOWNLOADS = 25;
+const MAX_CONCURRENT_DOWNLOADS = 100;
+const MAX_SOCKETS = 50;
+const MAX_TOTAL_SOCKETS = 100;
+
+const getMemoizedLookup: () => LookupFunction = () => {
+  let _lookup: LookupFunction;
+  let hostIpMap: Record<string, string>;
+  hostIpMap = {};
+  _lookup = (hostname, opts, cb) => {
+    if(hostIpMap[hostname] !== undefined) {
+      process.nextTick(() => {
+        cb(undefined, hostIpMap[hostname], 4);
+      });
+      return;
+    }
+    dns.resolve4(hostname, (err, addresses) => {
+      let address: string;
+      if(err) {
+        cb(err, undefined, undefined);
+        return;
+      }
+      address = addresses?.[0];
+      // console.log(`\nresolved: '${hostname}' to: ${address}\n`);
+      if(address !== undefined) {
+        hostIpMap[hostname] = address;
+      }
+      cb(err, addresses?.[0], 4);
+    });
+  };
+  return _lookup;
+};
+
+const getHttpsAgent = () => new https.Agent({
+  family: 4,
+  keepAlive: false,
+  maxSockets: MAX_SOCKETS,
+  maxTotalSockets: MAX_TOTAL_SOCKETS,
+  // maxCachedSessions: 0,
+  // host: '127.0.0.1',
+  lookup: getMemoizedLookup(),
+});
+
+const httpsAgent = getHttpsAgent();
 
 export async function txt2Main(argv: string[]) {
   let cliArgs: string[], cmdArg: string;
@@ -35,6 +82,8 @@ export async function txt2Main(argv: string[]) {
 async function initBooks() {
   let scrapedBooks: ScrapedBookWithFile[];
   console.log(`MAX_CONCURRENT_DOWNLOADS: ${MAX_CONCURRENT_DOWNLOADS}`);
+  console.log(`MAX_SOCKETS: ${MAX_SOCKETS}`);
+  console.log(`MAX_TOTAL_SOCKETS: ${MAX_TOTAL_SOCKETS}`);
   await mkdirIfNotExistRecursive(EBOOKS_DATA_DIR_PATH);
   scrapedBooks = await loadScrapedBooksMeta();
   // await downloadBooksSync(scrapedBooks);
@@ -44,23 +93,34 @@ async function initBooks() {
 async function downloadBooks(scrapedBooks: ScrapedBookWithFile[]) {
   let downloadBooksTimer: Timer, downloadBooksMs: number;
   let doneBookCount: number, donePercent: number;
+  let scrapedBooksToDownload: ScrapedBookWithFile[];
   let runningDownloads: number;
   runningDownloads = 0;
   doneBookCount = 0;
+  scrapedBooksToDownload = [];
+  for(let i = 0; i < scrapedBooks.length; ++i) {
+    let scrapedBook: ScrapedBookWithFile, fileExists: boolean;
+    scrapedBook = scrapedBooks[i];
+    fileExists = await checkFile(scrapedBook.filePath);
+    if(!fileExists) {
+      scrapedBooksToDownload.push(scrapedBook);
+    }
+  }
+  console.log(`scrapedBooksToDownload: ${scrapedBooksToDownload.length.toLocaleString()}`);
   console.log('');
   downloadBooksTimer = Timer.start();
-  for(let i = 0; i < scrapedBooks.length; ++i) {
+  for(let i = 0; i < scrapedBooksToDownload.length; ++i) {
     let scrapedBook: ScrapedBookWithFile;
     while(runningDownloads >= MAX_CONCURRENT_DOWNLOADS) {
-      await sleep(1);
+      await sleep(10);
     }
-    scrapedBook = scrapedBooks[i];
+    scrapedBook = scrapedBooksToDownload[i];
     runningDownloads++;
     (async () => {
       await downloadBook(scrapedBook);
       runningDownloads--;
       doneBookCount++;
-      donePercent = doneBookCount / scrapedBooks.length;
+      donePercent = doneBookCount / scrapedBooksToDownload.length;
       if((doneBookCount % 100) === 0) {
         process.stdout.write(`${(donePercent * 100).toFixed(1)}%`);
       } else if((doneBookCount % 10) === 0) {
@@ -79,25 +139,6 @@ async function downloadBooks(scrapedBooks: ScrapedBookWithFile[]) {
   console.log(`Downloaded ${doneBookCount.toLocaleString()} books in ${getIntuitiveTimeString(downloadBooksMs)}`);
 }
 
-async function downloadBooksSync(scrapedBooks: ScrapedBookWithFile[]) {
-  let downloadBooksTimer: Timer, downloadBooksMs: number;
-  let doneBookCount: number, donePercent: number;
-  doneBookCount = 0;
-  downloadBooksTimer = Timer.start();
-  for(let i = 0; i < scrapedBooks.length; ++i) {
-    let scrapedBook: ScrapedBookWithFile;
-    scrapedBook = scrapedBooks[i];
-    await downloadBook(scrapedBook);
-    doneBookCount++;
-    donePercent = doneBookCount / scrapedBooks.length;
-    console.log(`Downloaded ${scrapedBook.title}`);
-    console.log(`${doneBookCount}/${scrapedBooks.length}`);
-    console.log(`${(donePercent * 100).toFixed(1)}%, ${getIntuitiveTimeString(downloadBooksTimer.currentMs())}`);
-  }
-  downloadBooksMs = downloadBooksTimer.stop();
-  console.log(`Downloaded ${doneBookCount.toLocaleString()} books in ${getIntuitiveTimeString(downloadBooksMs)}`);
-}
-
 async function downloadBook(scrapedBook: ScrapedBookWithFile) {
   let filePath: string, fileExists: boolean;
   let resp: Response, ws: WriteStream;
@@ -106,16 +147,48 @@ async function downloadBook(scrapedBook: ScrapedBookWithFile) {
   if(fileExists) {
     return;
   }
-  try {
-    resp = await fetch(scrapedBook.plaintextUrl);
-  } catch(e) {
-    // console.log(resp.status);
-    console.log(e);
-    console.log(e.code);
-    throw e;
-  }
+  const doRetry = (err: any) => {
+    if(
+      (err?.code === 'ECONNRESET')
+      || (err?.code === 'ETIMEDOUT')
+    ) {
+      return true;
+    }
+  };
+  const retryDelay = (attempt: number, err: any) => {
+    switch(err?.code) {
+      case 'ECONNRESET':
+        process.stdout.write(`R${attempt}x`);
+        break;
+      case 'ETIMEDOUT':
+        process.stdout.write(`R${attempt}x`);
+        break;
+    }
+    // console.log(err?.message);
+    // console.log(`attempt: ${attempt}`);
+    return (attempt * 100);
+  };
+  resp = await fetchRetry(scrapedBook.plaintextUrl, {
+    agent: httpsAgent,
+    doRetry,
+    retryDelay,
+    retries: 5,
+  });
+  // try {
+  //   resp = await fetch(scrapedBook.plaintextUrl, {
+  //     agent: httpsAgent,
+  //   });
+  // } catch(e) {
+  //   // console.log(resp.status);
+  //   console.log(e);
+  //   console.log(e.code);
+  //   throw e;
+  // }
   ws = createWriteStream(filePath);
   return new Promise<void>((resolve, reject) => {
+    // resp.body.on('end', () => {
+    //   resolve();
+    // });
     ws.on('close', () => {
       resolve();
     });
@@ -128,7 +201,7 @@ async function downloadBook(scrapedBook: ScrapedBookWithFile) {
 
 async function loadScrapedBooksMeta(): Promise<ScrapedBookWithFile[]> {
   let scrapedDirExists: boolean, scrapedMetaDirents: Dirent[];
-  let scrapedBookMetaPaths: string[], scrapedBooksMeta: ScrapedBook[];
+  let scrapedBookMetaPaths: string[], scrapedBooksMeta: ScrapedBookWithFile[];
   let scrapedBooksWithFileNames: ScrapedBookWithFile[];
   scrapedDirExists = await checkDir(SCRAPED_EBOOKS_DIR_PATH);
   if(!scrapedDirExists) {
@@ -160,11 +233,11 @@ async function loadScrapedBooksMeta(): Promise<ScrapedBookWithFile[]> {
     currBooksMeta = JSON.parse(metaFileData.toString());
     console.log(`${currScrapedBookMetaPath}: ${currBooksMeta.length}`);
     for(let k = 0; k < currBooksMeta.length; ++k) {
-      let currBookMeta: ScrapedBook;
+      let currBookMeta: ScrapedBookWithFile;
       let foundBooksMetaIdx: number;
-      currBookMeta = currBooksMeta[k];
+      currBookMeta = getScrapedBookWithFileName(currBooksMeta[k]);
       foundBooksMetaIdx = scrapedBooksMeta.findIndex(scrapedBookMeta => {
-        return (scrapedBookMeta.plaintextUrl === currBookMeta.plaintextUrl);
+        return scrapedBookMeta.fileName === currBookMeta.fileName;
       });
       if(foundBooksMetaIdx === -1) {
         scrapedBooksMeta.push(currBookMeta);
@@ -172,20 +245,13 @@ async function loadScrapedBooksMeta(): Promise<ScrapedBookWithFile[]> {
     }
   }
   console.log(scrapedBooksMeta.length);
-  scrapedBooksWithFileNames = scrapedBooksMeta.map(getScrapedBookWithFileName);
-  return scrapedBooksWithFileNames;
+  return scrapedBooksMeta;
 }
 
 function getScrapedBookWithFileName(scrapedBook: ScrapedBook): ScrapedBookWithFile {
   let withFileName: ScrapedBookWithFile;
   let titleNoPunct: string, titleKebabCase: string;
-  titleNoPunct = scrapedBook.title.replace(/[^\p{L} ]/gu, '');
-  titleKebabCase = titleNoPunct
-    .toLowerCase()
-    .split(' ')
-    .filter(word => word.length > 0)
-    .join('-')
-  ;
+  titleKebabCase = getScrapedBookKebabTitle(scrapedBook.title);
   withFileName = {
     ...scrapedBook,
     fileName: titleKebabCase,
@@ -195,4 +261,16 @@ function getScrapedBookWithFileName(scrapedBook: ScrapedBook): ScrapedBookWithFi
     ].join(path.sep)
   };
   return withFileName;
+}
+
+function getScrapedBookKebabTitle(title: string) {
+  let titleNoPunct: string, titleKebabCase: string;
+  titleNoPunct = title.replace(/[^\p{L} ]/gu, '');
+  titleKebabCase = titleNoPunct
+    .toLowerCase()
+    .split(' ')
+    .filter(word => word.length > 0)
+    .join('-')
+  ;
+  return titleKebabCase;
 }
